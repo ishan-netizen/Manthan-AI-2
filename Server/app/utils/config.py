@@ -23,7 +23,10 @@ class Settings:
         # Server settings
         self.HOST = os.getenv("HOST", "127.0.0.1")
         self.PORT = int(os.getenv("PORT", "8000"))
-        self.ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS","https://manthan-ai-brown.vercel.app")
+        self.ALLOWED_ORIGINS = os.getenv(
+            "ALLOWED_ORIGINS",
+            "http://localhost:5173,http://127.0.0.1:5173,https://manthan-ai-brown.vercel.app"
+        )
         
         # File handling
         self.MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB

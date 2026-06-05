@@ -2,6 +2,6 @@
 API routers package for endpoint organization.
 """
 
-from . import analyze
+from . import analyze, auth
 
-__all__ = ["analyze"]
+__all__ = ["analyze", "auth"]

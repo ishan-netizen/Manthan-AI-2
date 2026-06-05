@@ -1,18 +1,17 @@
-import { useAuth0 } from '@auth0/auth0-react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { LogIn } from 'lucide-react'
 
 export const LoginButton = () => {
-  const { loginWithRedirect, isLoading } = useAuth0()
+  const navigate = useNavigate()
 
   return (
     <Button 
-      onClick={() => loginWithRedirect()}
-      disabled={isLoading}
+      onClick={() => navigate('/login')}
       className="flex items-center gap-2"
     >
       <LogIn size={16} />
-      {isLoading ? 'Loading...' : 'Sign In'}
+      Sign In
     </Button>
   )
 }

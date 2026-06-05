@@ -1,13 +1,27 @@
-import { useAuth0 } from '@auth0/auth0-react'
-import { LoginButton } from './LoginButton'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
+
+const PUBLIC_PATHS = ['/login', '/signup']
 
 interface AuthGuardProps {
   children: React.ReactNode
 }
 
 export const AuthGuard = ({ children }: AuthGuardProps) => {
-  const { isAuthenticated, isLoading } = useAuth0()
+  const { isAuthenticated, isLoading } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (isLoading) return
+    if (!isAuthenticated && !PUBLIC_PATHS.includes(location.pathname)) {
+      navigate('/login', { replace: true })
+    }
+    if (isAuthenticated && PUBLIC_PATHS.includes(location.pathname)) {
+      navigate('/', { replace: true })
+    }
+  }, [isAuthenticated, isLoading, location.pathname, navigate])
 
   if (isLoading) {
     return (

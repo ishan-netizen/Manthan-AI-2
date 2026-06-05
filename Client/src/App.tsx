@@ -7,7 +7,9 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { UserProfile } from '@/components/auth/UserProfile';
 import HomePage from "./pages/HomePage";
+import LoginPage from "./pages/LoginPage";
 import ResultsPage from "./pages/ResultsPage";
+import SignupPage from "./pages/SignupPage";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -32,6 +34,8 @@ const App = () => (
               <main>
                 <Routes>
                   <Route path="/" element={<HomePage />} />
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/signup" element={<SignupPage />} />
                   <Route path="/results" element={<ResultsPage />} />
                   <Route path="/legacy" element={<Index />} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

@@ -14,13 +14,14 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi import APIRouter
 
-from app.routers import analyze
+from app.database import ensure_indexes
+from app.routers import analyze, auth
 from app.utils.file_handler import cleanup_temp_files
 from app.utils.config import get_settings
 
-# ✅ DEBUG: Print environment check for Render startup logs
-print("🧠 DEBUG → OPENAI_API_KEY (first 8 chars):", 
-      os.getenv("OPENAI_API_KEY")[:8] + "..." if os.getenv("OPENAI_API_KEY") else "❌ NOT FOUND")
+# DEBUG: Print environment check for Render startup logs
+print("DEBUG -> OPENAI_API_KEY (first 8 chars):",
+      os.getenv("OPENAI_API_KEY")[:8] + "..." if os.getenv("OPENAI_API_KEY") else "NOT FOUND")
 
 # Get settings
 settings = get_settings()
@@ -57,6 +58,9 @@ async def lifespan(app: FastAPI):
         # Temp directory setup
         temp_dir = settings.get_temp_dir()
         logger.info(f"📁 Temp directory: {temp_dir}")
+
+        await ensure_indexes()
+        logger.info("Auth database indexes are ready")
 
         import shutil
         disk_usage = shutil.disk_usage(temp_dir)
@@ -135,6 +139,7 @@ async def general_exception_handler(request, exc):
 
 # Routers
 app.include_router(analyze.router, prefix="/api", tags=["analysis"])
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 
 # Root endpoints
 @app.get("/")
@@ -144,7 +149,7 @@ async def root():
         "version": settings.APP_VERSION,
         "status": "operational",
         "docs": "/docs" if settings.DEBUG else "disabled",
-        "endpoints": {"analyze": "/api/analyze", "health": "/health", "status": "/api/status"}
+        "endpoints": {"analyze": "/api/analyze", "auth": "/api/auth", "health": "/health", "status": "/api/status"}
     }
 
 @app.get("/health")
@@ -185,10 +190,10 @@ async def api_info():
         "capabilities": {
             "transcription": "OpenAI Whisper API",
             "analysis": {
-                "summarization": settings.ENABLE_SUMMARIZATION,
-                "action_items": settings.ENABLE_ACTION_ITEM_EXTRACTION,
-                "sentiment": settings.ENABLE_SENTIMENT_ANALYSIS,
-                "topics": settings.ENABLE_TOPIC_EXTRACTION,
+                "summarization": True,
+                "action_items": True,
+                "sentiment": True,
+                "topics": True,
                 "decisions": True
             }
         }

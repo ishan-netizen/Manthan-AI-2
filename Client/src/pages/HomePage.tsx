@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth0 } from '@auth0/auth0-react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Header } from '@/components/Header';
 import { FileUpload } from '@/components/FileUpload';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { LogIn, Mail, Github, Chrome, Brain, Zap, Shield, Clock } from 'lucide-react';
+import { LogIn, UserPlus, Brain, Zap, Shield, Clock } from 'lucide-react';
 import heroBackground from '@/assets/hero-background.jpg';
 
 interface AnalysisResults {
@@ -39,7 +39,7 @@ interface AnalysisResults {
 
 const HomePage = () => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const { isAuthenticated, loginWithRedirect, logout, isLoading } = useAuth0();
+  const { isAuthenticated, logout } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -54,15 +54,15 @@ const HomePage = () => {
   };
 
   const handleEmailSignIn = () => {
-        loginWithRedirect();
+    navigate('/login');
   };
 
-  const handleGoogleSignIn = () => {
-  loginWithRedirect({ authorizationParams: { connection: 'google-oauth2' } });
+  const handleEmailSignup = () => {
+    navigate('/signup');
   };
 
   const handleSignOut = () => {
-    logout({ logoutParams: { returnTo: window.location.origin } });
+    logout();
     navigate('/');
     toast({
       title: "Signed out",
@@ -132,7 +132,7 @@ const HomePage = () => {
             <div className="max-w-md mx-auto">
               <div className="glass border border-glass-border/30 rounded-2xl p-8 text-center">
                 <h2 className="text-2xl font-bold mb-2">Get Started</h2>
-                <p className="text-muted-foreground mb-8">Sign in to start analyzing your meetings</p>
+                <p className="text-muted-foreground mb-8">Use email and password to access your account</p>
                 
                 <div className="space-y-4">
                   <Button 
@@ -141,19 +141,18 @@ const HomePage = () => {
                     size="lg" 
                     className="w-full"
                   >
-                    <Mail className="w-5 h-5 mr-2" />
-                    Continue with Email
+                    <LogIn className="w-5 h-5 mr-2" />
+                    Login with Email
                   </Button>
-                  
-                  
+
                   <Button 
-                    onClick={handleGoogleSignIn}
+                    onClick={handleEmailSignup}
                     variant="outline" 
                     size="lg" 
                     className="w-full"
                   >
-                    <Chrome className="w-5 h-5 mr-2" />
-                    Continue with Google
+                    <UserPlus className="w-5 h-5 mr-2" />
+                    Sign up with Email
                   </Button>
                 </div>
 
