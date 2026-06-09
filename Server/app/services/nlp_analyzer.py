@@ -143,6 +143,43 @@ Rules:
 Transcript:
 {transcript_json}"""
 
+NORMALIZE_AND_ANALYZE_PROMPT = """You are a meeting analyst and transcript editor. Below is a meeting transcript where multiple chunks were transcribed independently, causing inconsistent speaker labels.
+
+Your tasks in ONE response:
+1. Normalize speaker labels — merge same speakers across chunks into consistent labels
+2. Generate analysis — summary, action items, key decisions, sentiment, topics
+
+Return ONLY valid JSON — no markdown, no code fences, no extra text:
+
+{
+  "transcript": [
+    {"speaker": "Speaker name", "text": "what they said", "start_time": seconds, "end_time": seconds, "confidence": 0.95}
+  ],
+  "summary": "Concise 2-3 sentence meeting summary — MUST BE IN ENGLISH",
+  "action_items": [
+    {"text": "action description — MUST BE IN ENGLISH", "assignee": "person name or null", "deadline": "deadline or null", "priority": "high|medium|low"}
+  ],
+  "key_decisions": [
+    {"decision": "decision description — MUST BE IN ENGLISH", "rationale": "why this was decided — MUST BE IN ENGLISH", "impact": "expected impact"}
+  ],
+  "sentiment": {"overall": "positive|negative|neutral", "tone": "brief tone description — MUST BE IN ENGLISH", "score": 0.7},
+  "topics": ["topic in English", "topic in English"]
+}
+
+SPEAKER NORMALIZATION RULES:
+- Analyze speaking style, vocabulary, tone, and conversational flow to determine which labels refer to the same person
+- If Speaker A in early segments and Speaker B in later segments are the SAME person, merge them under ONE label
+- Do NOT merge genuinely different speakers
+- If any speaker introduced themselves by name, use that name
+- Return the FULL transcript array with corrected speaker fields
+
+ANALYSIS RULES:
+- Summary, action items, key decisions, sentiment, and topics MUST be in English — even if the meeting is Hindi or Hinglish
+- Extract ALL action items and key decisions — do not miss any
+
+Transcript:
+{transcript_json}"""
+
 ANALYSIS_FROM_TEXT_PROMPT = """You are a meeting analyst. Given this complete meeting transcript, return ONLY valid JSON — no markdown, no code fences, no extra text.
 
 {
@@ -363,12 +400,9 @@ class ProductionNLPAnalyzer:
             return
 
         full_text = " ".join(s.get("text", "") for s in merged_transcript)
-        yield {"status": "progress", "step": "normalizing", "percent": 75, "message": "Normalizing speaker labels..."}
-        merged_transcript = await self._normalize_speakers(merged_transcript)
-        full_text = " ".join(s.get("text", "") for s in merged_transcript)
-        yield {"status": "progress", "step": "analyzing", "percent": 80, "message": "Running final analysis..."}
+        yield {"status": "progress", "step": "analyzing", "percent": 75, "message": "Normalizing speakers & analyzing..."}
 
-        analysis_data = await self._analyze_transcript(full_text)
+        analysis_data = await self._normalize_and_analyze(merged_transcript)
         analysis_data["transcript"] = merged_transcript
         final = self._build_analysis_result(analysis_data)
 
@@ -547,14 +581,10 @@ class ProductionNLPAnalyzer:
             word_count = len(full_text.split())
             logger.info(f"[CHUNKED] Merged transcript: {len(full_text)} chars, ~{word_count} words")
 
-            logger.info(f"[CHUNKED] Normalizing speaker labels across chunks...")
-            merged_transcript = await self._normalize_speakers(merged_transcript)
-            full_text = " ".join(s.get("text", "") for s in merged_transcript)
-
-            logger.info(f"[CHUNKED] Running final text analysis (model={self.text_model_name})...")
+            logger.info(f"[CHUNKED] Normalizing speakers + analyzing in one call...")
             t_analysis = time.time()
-            analysis_data = await self._analyze_transcript(full_text)
-            logger.info(f"[CHUNKED] Final analysis done in {time.time()-t_analysis:.1f}s")
+            analysis_data = await self._normalize_and_analyze(merged_transcript)
+            logger.info(f"[CHUNKED] Combined normalize+analyze done in {time.time()-t_analysis:.1f}s")
 
             analysis_data["transcript"] = merged_transcript
             final = self._build_analysis_result(analysis_data)
@@ -665,6 +695,56 @@ class ProductionNLPAnalyzer:
         transcript = data.get("transcript", [])
         logger.info(f"{tag} DONE — {len(transcript)} segments in {time.time()-t_total:.1f}s total")
         return transcript
+
+    async def _normalize_and_analyze(self, transcript: List[dict]) -> Dict[str, Any]:
+        """Normalize speakers and generate analysis in ONE Gemini call."""
+        transcript_json = json.dumps(transcript, ensure_ascii=False)
+        prompt = NORMALIZE_AND_ANALYZE_PROMPT.format(transcript_json=transcript_json)
+
+        logger.info(f"[COMBINED] Normalizing speakers + analyzing in one call — {len(transcript)} segments")
+        t0 = time.time()
+        try:
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
+                model=self.text_model_name,
+                contents=[prompt],
+            )
+        except Exception as e:
+            logger.error(f"[COMBINED] Failed — {type(e).__name__}: {e}")
+            return {"summary": "Analysis unavailable", "action_items": [], "key_decisions": [], "sentiment": {"overall": "neutral", "tone": "unknown", "score": 0.5}, "topics": []}
+
+        raw_text = response.text or ""
+        data = self._parse_json(raw_text)
+        if not data:
+            logger.error(f"[COMBINED] JSON parse failed — {len(raw_text)} chars: {raw_text[:300]}")
+            return {"summary": "Analysis unavailable", "action_items": [], "key_decisions": [], "sentiment": {"overall": "neutral", "tone": "unknown", "score": 0.5}, "topics": []}
+
+        normalized = data.get("transcript")
+        if normalized and isinstance(normalized, list) and len(normalized) == len(transcript):
+            for i, seg in enumerate(normalized):
+                if isinstance(seg, dict) and "speaker" in seg:
+                    transcript[i]["speaker"] = seg["speaker"]
+            speakers = set(s.get("speaker") for s in transcript)
+            logger.info(f"[COMBINED] Speakers normalized: {speakers}")
+
+        if self._contains_devanagari(data.get("summary", "")):
+            logger.info("[COMBINED] Hindi detected in summary — translating")
+            data["summary"] = await self.translate_text(data["summary"], "en")
+        for i, item in enumerate(data.get("action_items", [])):
+            if isinstance(item, dict) and self._contains_devanagari(item.get("text", "")):
+                data["action_items"][i]["text"] = await self.translate_text(item["text"], "en")
+        for i, d in enumerate(data.get("key_decisions", [])):
+            if isinstance(d, dict):
+                if self._contains_devanagari(d.get("decision", "")):
+                    data["key_decisions"][i]["decision"] = await self.translate_text(d["decision"], "en")
+                if self._contains_devanagari(d.get("rationale", "")):
+                    data["key_decisions"][i]["rationale"] = await self.translate_text(d["rationale"], "en")
+
+        if isinstance(data.get("sentiment", {}).get("tone", ""), str) and self._contains_devanagari(data["sentiment"]["tone"]):
+            data["sentiment"]["tone"] = await self.translate_text(data["sentiment"]["tone"], "en")
+
+        logger.info(f"[COMBINED] Done in {time.time() - t0:.1f}s")
+        return data
 
     async def _normalize_speakers(self, transcript: List[dict]) -> List[dict]:
         """Normalize inconsistent speaker labels across chunks using Gemini."""
