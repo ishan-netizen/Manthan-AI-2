@@ -1,5 +1,4 @@
 import os
-import ssl
 
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -17,23 +16,20 @@ password_resets_collection = None
 analyses_collection = None
 
 if MONGODB_URI:
-    try:
-        _client = AsyncIOMotorClient(
-            MONGODB_URI,
-            tls=True,
-            tlsAllowInvalidCertificates=True,
-            tlsAllowInvalidHostnames=True,
-            tlsDisableOCSPEndpointCheck=True,
-            serverSelectionTimeoutMS=30000,
-            connectTimeoutMS=30000,
-        )
-        _db = _client[MONGODB_DB]
-        users_collection = _db["users"]
-        sessions_collection = _db["sessions"]
-        password_resets_collection = _db["password_resets"]
-        analyses_collection = _db["analyses"]
-    except Exception:
-        pass
+    _client = AsyncIOMotorClient(
+        MONGODB_URI,
+        tls=True,
+        tlsAllowInvalidCertificates=True,
+        tlsAllowInvalidHostnames=True,
+        tlsDisableOCSPEndpointCheck=True,
+        serverSelectionTimeoutMS=30000,
+        connectTimeoutMS=30000,
+    )
+    _db = _client[MONGODB_DB]
+    users_collection = _db["users"]
+    sessions_collection = _db["sessions"]
+    password_resets_collection = _db["password_resets"]
+    analyses_collection = _db["analyses"]
 
 
 async def ensure_indexes() -> None:
