@@ -51,8 +51,9 @@ async def lifespan(app: FastAPI):
         await ensure_indexes()
         logger.info("Database indexes ready")
 
-        result = await sessions_collection.delete_many({})
-        logger.info(f"Cleared {result.deleted_count} existing sessions — fresh login required")
+        if sessions_collection is not None:
+            result = await sessions_collection.delete_many({})
+            logger.info(f"Cleared {result.deleted_count} existing sessions — fresh login required")
 
         import shutil
         disk_usage = shutil.disk_usage(temp_dir)
