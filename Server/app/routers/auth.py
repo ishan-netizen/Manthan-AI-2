@@ -93,6 +93,7 @@ def set_session_cookie(response: Response, session_token: str, expires_at: datet
         secure=True,
         samesite="none",
         path="/",
+        domain=None,
     )
 
 
