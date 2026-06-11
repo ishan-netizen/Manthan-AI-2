@@ -90,8 +90,8 @@ def set_session_cookie(response: Response, session_token: str, expires_at: datet
         key=SESSION_COOKIE_NAME,
         value=session_token,
         httponly=True,
-        secure=os.getenv("COOKIE_SECURE", "false").lower() == "true",
-        samesite=os.getenv("COOKIE_SAMESITE", "lax"),
+        secure=True,
+        samesite="none",
         path="/",
     )
 
