@@ -28,7 +28,7 @@ steps:
       - --region=us-central1
       - --platform=managed
       - --allow-unauthenticated
-      - --memory=2Gi
+      - --memory=4Gi
       - --cpu=1
       - --timeout=600
       - --service-account=immersivedata-sandbox@appspot.gserviceaccount.com
