@@ -187,26 +187,11 @@ async def analyze_meeting(
                 detail=f"Audio too long ({audio_info['duration']:.1f}s). Maximum: {settings.MAX_AUDIO_DURATION}s"
             )
         
-        # Process audio file
-        logger.info(f"[ANALYZE] [{time.time()-start_time:.0f}s elapsed] Starting pydub compression...")
-        t_proc = time.time()
-        processed_audio_path = await audio_processor.process_audio(temp_filepath, session_id)
-        processed_size_mb = os.path.getsize(processed_audio_path) / 1024 / 1024
-        logger.info(
-            f"[ANALYZE] [{time.time()-start_time:.0f}s elapsed] Pydub done in {time.time()-t_proc:.1f}s | "
-            f"output: {processed_audio_path} ({processed_size_mb:.1f} MB)"
-        )
-        if processed_audio_path == temp_filepath:
-            logger.warning(
-                f"[ANALYZE] Pydub FALLBACK in effect — sending original {processed_size_mb:.1f} MB file to Gemini. "
-                f"This will create more chunks and may cause rate limit issues."
-            )
-
         # Analyze — use STT diarizer if available, else fall back to Gemini transcription
         if diarizer and diarizer.is_ready():
-            logger.info(f"[ANALYZE] [{time.time()-start_time:.0f}s elapsed] Transcribing with Google STT + diarization...")
+            logger.info(f"[ANALYZE] [{time.time()-start_time:.0f}s elapsed] Transcribing with Deepgram diarization...")
             t_stt = time.time()
-            transcript_segments = await diarizer.transcribe(processed_audio_path)
+            transcript_segments = await diarizer.transcribe(temp_filepath)
             logger.info(f"[ANALYZE] STT done in {time.time()-t_stt:.1f}s — {len(transcript_segments)} segments")
 
             logger.info(f"[ANALYZE] [{time.time()-start_time:.0f}s elapsed] Running Gemini analysis on transcript...")
@@ -214,7 +199,11 @@ async def analyze_meeting(
             async with ProductionNLPAnalyzer() as nlp_analyzer:
                 analysis_result = await nlp_analyzer.analyze_transcript_only(transcript_segments)
         else:
-            logger.info(f"[ANALYZE] [{time.time()-start_time:.0f}s elapsed] Starting Gemini analysis (transcription + analysis)...")
+            processed_audio_path = await audio_processor.process_audio(temp_filepath, session_id)
+            processed_size_mb = os.path.getsize(processed_audio_path) / 1024 / 1024
+            logger.info(f"[ANALYZE] Pydub done in {time.time()-start_time:.1f}s | output: {processed_size_mb:.1f} MB")
+
+            logger.info(f"[ANALYZE] [{time.time()-start_time:.0f}s elapsed] Starting Gemini analysis...")
             t_nlp = time.time()
             async with ProductionNLPAnalyzer() as nlp_analyzer:
                 analysis_result = await nlp_analyzer.analyze_meeting(processed_audio_path)
@@ -402,13 +391,17 @@ async def analyze_meeting_stream(
                 yield json.dumps({"status": "error", "message": "API key not configured"}) + "\n"
                 return
 
-            processed_audio_path = await audio_processor.process_audio(temp_filepath, session_id)
-
             if diarizer and diarizer.is_ready():
                 yield json.dumps({"status": "progress", "step": "transcribing", "percent": 10, "message": "Transcribing with speaker diarization..."}) + "\n"
                 t_stt = time.time()
-                transcript_segments = await diarizer.transcribe(processed_audio_path)
+                transcript_segments = await diarizer.transcribe(temp_filepath)
                 yield json.dumps({"status": "progress", "step": "transcribing", "percent": 70, "message": f"Transcribed {len(transcript_segments)} segments in {time.time()-t_stt:.0f}s"}) + "\n"
+                # Clean up raw file immediately — Deepgram is done
+                try:
+                    os.remove(temp_filepath)
+                except Exception:
+                    pass
+                temp_filepath = None
 
                 yield json.dumps({"status": "progress", "step": "analyzing", "percent": 75, "message": "Running Gemini analysis..."}) + "\n"
                 async with ProductionNLPAnalyzer() as nlp_analyzer:
@@ -459,6 +452,7 @@ async def analyze_meeting_stream(
                 }
                 yield json.dumps(final_payload, default=str) + "\n"
             else:
+                processed_audio_path = await audio_processor.process_audio(temp_filepath, session_id)
                 async with ProductionNLPAnalyzer() as nlp_analyzer:
                     async for event in nlp_analyzer.analyze_meeting_streaming(processed_audio_path):
                         if event["status"] == "complete":
