@@ -7,3 +7,5 @@ cookiejar.txt
 __pycache__/
 *.pyc
 .env
+AGENTS.md
+ARCHITECTURE_DECISIONS.md
