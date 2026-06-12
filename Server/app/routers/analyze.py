@@ -446,6 +446,7 @@ async def analyze_meeting_stream(
                     "transcript": transcript_data, "summary": response_obj.summary,
                     "action_items": action_items_data, "key_decisions": decisions_data,
                     "processing_time": processing_time,
+                    "gcs_path": gcs_path, "audio_gcs_path": audio_gcs_path,
                 }, default=str) + "\n"
                 return
             else:

@@ -32,6 +32,7 @@ export interface AnalysisResults {
   processing_time: number
   gcs_path?: string
   audio_gcs_path?: string
+  filename?: string
 }
 
 export interface FileUploadProps {
