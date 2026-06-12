@@ -32,7 +32,7 @@ steps:
       - --cpu=1
       - --timeout=600
       - --service-account=immersivedata-sandbox@appspot.gserviceaccount.com
-      - --set-env-vars=MONGODB_URI=${_MONGODB_URI},GEMINI_API_KEY=${_GEMINI_API_KEY},DEEPGRAM_API_KEY=${_DEEPGRAM_API_KEY},SESSION_SECRET=${_SESSION_SECRET}
+      - --set-env-vars=MONGODB_URI=${_MONGODB_URI},GEMINI_API_KEY=${_GEMINI_API_KEY},DEEPGRAM_API_KEY=${_DEEPGRAM_API_KEY},SESSION_SECRET=${_SESSION_SECRET},GCS_BUCKET=${_GCS_BUCKET}
     id: deploy-backend
     waitFor: [push-backend]
 
@@ -89,6 +89,7 @@ substitutions:
   _GEMINI_API_KEY: ''
   _DEEPGRAM_API_KEY: ''
   _SESSION_SECRET: ''
+  _GCS_BUCKET: ''
 
 images:
   - gcr.io/$PROJECT_ID/manthan-api

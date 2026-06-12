@@ -24,6 +24,7 @@ from app.utils.file_handler import validate_audio_file, cleanup_temp_files
 from app.utils.config import get_settings, Settings
 from app.database import analyses_collection
 from app.routers.auth import get_current_user
+from app.services import gcs_handler
 
 router = APIRouter()
 
@@ -320,6 +321,23 @@ async def upload_chunk(
     return {"status": "ok", "chunk": chunk_index}
 
 
+# --- GCS signed URL upload ---
+
+@router.post("/upload/init")
+async def init_upload(
+    filename: str = Form(...),
+    content_type: str = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    """Generate a signed GCS upload URL for direct browser-to-GCS upload."""
+    if not gcs_handler.is_ready():
+        raise HTTPException(status_code=500, detail="GCS not configured")
+    session_id = str(uuid.uuid4())
+    safe_filename = f"{session_id}/{filename}"
+    upload_url, gcs_path = gcs_handler.generate_upload_url(safe_filename, content_type)
+    return {"upload_url": upload_url, "gcs_path": gcs_path, "session_id": session_id}
+
+
 # --- Streaming analysis endpoint ---
 
 @router.post("/analyze/stream")
@@ -329,6 +347,7 @@ async def analyze_meeting_stream(
     file: UploadFile = File(None),
     upload_id: str = Form(None),
     original_filename: str = Form(None),
+    gcs_path: str = Form(None),
     settings: Settings = Depends(get_settings_dependency),
     user: dict = Depends(get_current_user),
 ):
@@ -338,7 +357,11 @@ async def analyze_meeting_stream(
     start_time = time.time()
 
     is_chunked = bool(upload_id)
-    if is_chunked:
+    is_gcs = bool(gcs_path)
+    if is_gcs:
+        if not original_filename:
+            original_filename = gcs_path.rsplit("/", 1)[-1]
+    elif is_chunked:
         if not original_filename:
             original_filename = "recording.mp3"
     elif not file or not file.filename:
@@ -374,6 +397,9 @@ async def analyze_meeting_stream(
                         with open(cp, "rb") as cf:
                             out.write(cf.read())
                 background_tasks.add_task(cleanup_temp_files, chunk_dir)
+            elif is_gcs:
+                yield json.dumps({"status": "progress", "step": "downloading", "percent": 5, "message": "Downloading from storage..."}) + "\n"
+                gcs_handler.download_to_file(gcs_path, temp_filepath)
             else:
                 with open(temp_filepath, "wb") as f:
                     f.write(await file.read())

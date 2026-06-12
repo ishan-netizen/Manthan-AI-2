@@ -10,4 +10,5 @@ motor==3.7.1
 audioop-lts==0.2.2; python_version >= '3.13'
 google-genai>=1.0.0
 deepgram-sdk>=3.0.0
+google-cloud-storage>=2.0.0
 certifi>=2023.7.22
