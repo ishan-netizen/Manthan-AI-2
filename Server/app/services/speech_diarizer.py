@@ -38,12 +38,17 @@ class SpeechDiarizer:
         file_size_mb = os.path.getsize(audio_path) / (1024 * 1024)
         logger.info(f"[DEEPGRAM] Transcribing {file_size_mb:.1f} MB — diarization + punctuation")
 
-        with open(audio_path, "rb") as f:
-            audio_bytes = f.read()
+        def file_chunks():
+            with open(audio_path, "rb") as f:
+                while True:
+                    chunk = f.read(256 * 1024)
+                    if not chunk:
+                        break
+                    yield chunk
 
         response = await asyncio.to_thread(
             self.client.listen.v1.media.transcribe_file,
-            request=audio_bytes,
+            request=file_chunks(),
             model="nova-3",
             language="hi",
             diarize_model="latest",
