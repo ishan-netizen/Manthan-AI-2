@@ -14,6 +14,7 @@ from google.cloud import storage
 logger = logging.getLogger(__name__)
 
 GCS_BUCKET = os.getenv("GCS_BUCKET", "").strip()
+GCS_SIGNER_SA = os.getenv("GCS_SIGNER_SA", "immersivedata-sandbox@appspot.gserviceaccount.com")
 
 if GCS_BUCKET:
     _client = storage.Client()
@@ -34,6 +35,7 @@ def generate_upload_url(filename: str, content_type: str) -> Tuple[str, str]:
         expiration=datetime.timedelta(minutes=15),
         method="PUT",
         content_type=content_type,
+        service_account_email=GCS_SIGNER_SA,
     )
     return url, f"gs://{GCS_BUCKET}/{filename}"
 
@@ -46,6 +48,7 @@ def generate_download_url(gcs_path: str, minutes: int = 60) -> str:
         version="v4",
         expiration=datetime.timedelta(minutes=minutes),
         method="GET",
+        service_account_email=GCS_SIGNER_SA,
     )
 
 
