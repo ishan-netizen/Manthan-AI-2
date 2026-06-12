@@ -61,6 +61,26 @@ class SpeechDiarizer:
         logger.info(f"[DEEPGRAM] Done in {time.time() - t0:.1f}s — {len(segments)} segments")
         return segments
 
+    async def transcribe_url(self, signed_url: str) -> List[dict]:
+        """Transcribe audio from a signed GCS URL — Deepgram fetches directly."""
+        t0 = time.time()
+        logger.info(f"[DEEPGRAM] Transcribing from URL — diarization + punctuation")
+
+        response = await asyncio.to_thread(
+            self.client.listen.v1.media.transcribe_url,
+            url=signed_url,
+            model="nova-3",
+            language="hi",
+            diarize_model="latest",
+            punctuate=True,
+            smart_format=True,
+            utterances=True,
+        )
+
+        segments = self._parse_response(response)
+        logger.info(f"[DEEPGRAM] Done in {time.time() - t0:.1f}s — {len(segments)} segments")
+        return segments
+
     def _parse_response(self, response) -> List[dict]:
         results = getattr(response, "results", None)
         if results is None:

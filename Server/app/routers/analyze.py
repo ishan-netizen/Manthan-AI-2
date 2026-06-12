@@ -398,8 +398,46 @@ async def analyze_meeting_stream(
                             out.write(cf.read())
                 background_tasks.add_task(cleanup_temp_files, chunk_dir)
             elif is_gcs:
-                yield json.dumps({"status": "progress", "step": "downloading", "percent": 5, "message": "Downloading from storage..."}) + "\n"
-                gcs_handler.download_to_file(gcs_path, temp_filepath)
+                yield json.dumps({"status": "progress", "step": "transcribing", "percent": 10, "message": "Transcribing with speaker diarization..."}) + "\n"
+                if not diarizer or not diarizer.is_ready():
+                    yield json.dumps({"status": "error", "message": "Diarizer not available for GCS uploads"}) + "\n"
+                    return
+                signed_url = gcs_handler.generate_download_url(gcs_path)
+                transcript_segments = await diarizer.transcribe_url(signed_url)
+                yield json.dumps({"status": "progress", "step": "transcribing", "percent": 70, "message": f"Transcribed {len(transcript_segments)} segments"}) + "\n"
+
+                yield json.dumps({"status": "progress", "step": "analyzing", "percent": 75, "message": "Running Gemini analysis..."}) + "\n"
+                async with ProductionNLPAnalyzer() as nlp_analyzer:
+                    analysis_result = await nlp_analyzer.analyze_transcript_only(transcript_segments)
+                yield json.dumps({"status": "progress", "step": "done", "percent": 100, "message": f"Complete in {time.time()-start_time:.0f}s"}) + "\n"
+
+                processing_time = round(time.time() - start_time, 2)
+                analysis_result["processing_time"] = processing_time
+                transcript = analysis_result.get("transcript", [])
+                word_count = sum(len(seg.get("text", "").split()) for seg in transcript if isinstance(seg, dict))
+
+                response_obj = AnalysisResponse(session_id=session_id, filename=original_filename, **analysis_result)
+                try:
+                    transcript_data = [seg.dict() if hasattr(seg, 'dict') else seg for seg in response_obj.transcript]
+                    action_items_data = [item.dict() if hasattr(item, 'dict') else item for item in response_obj.action_items]
+                    decisions_data = [d.dict() if hasattr(d, 'dict') else d for d in response_obj.key_decisions]
+                    await analyses_collection.insert_one({
+                        "user_id": user["_id"], "session_id": session_id, "filename": original_filename,
+                        "transcript": transcript_data, "summary": response_obj.summary,
+                        "action_items": action_items_data, "key_decisions": decisions_data,
+                        "processing_time": processing_time, "duration": 0, "word_count": word_count,
+                        "created_at": datetime.now(timezone.utc),
+                    })
+                except Exception as save_error:
+                    logger.error(f"Failed to save analysis: {save_error}")
+
+                yield json.dumps({
+                    "status": "complete", "session_id": session_id, "filename": original_filename,
+                    "transcript": transcript_data, "summary": response_obj.summary,
+                    "action_items": action_items_data, "key_decisions": decisions_data,
+                    "processing_time": processing_time,
+                }, default=str) + "\n"
+                return
             else:
                 with open(temp_filepath, "wb") as f:
                     f.write(await file.read())
