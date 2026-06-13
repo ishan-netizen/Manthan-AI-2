@@ -233,7 +233,7 @@ const ResultsPage = () => {
           </div>
         )}
 
-        <ResultsSection results={results} mediaRef={mediaRef} />
+        <ResultsSection results={results} mediaRef={mediaRef} mediaReady={!!playbackUrl} />
       </main>
 
       {/* Background */}

@@ -24,6 +24,7 @@ import type { AnalysisResults } from '@/types/analysis';
 interface ResultsSectionProps {
   results: AnalysisResults;
   mediaRef?: React.RefObject<HTMLVideoElement | HTMLAudioElement>;
+  mediaReady?: boolean;
 }
 
 const statItems = [
@@ -60,7 +61,7 @@ const priorityLabels: Record<number, string> = {
   2: 'Low',
 };
 
-export const ResultsSection = ({ results, mediaRef }: ResultsSectionProps) => {
+export const ResultsSection = ({ results, mediaRef, mediaReady }: ResultsSectionProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [actionItems, setActionItems] = useState(results.action_items?.map(item => item.text) || []);
   const [completedItems, setCompletedItems] = useState<Set<number>>(new Set());
@@ -86,7 +87,7 @@ export const ResultsSection = ({ results, mediaRef }: ResultsSectionProps) => {
     };
     media.addEventListener('timeupdate', onTimeUpdate);
     return () => media.removeEventListener('timeupdate', onTimeUpdate);
-  }, [mediaRef, results.transcript]);
+  }, [mediaReady, results.transcript]);
 
   const handleTranslate = async (segId: string, text: string, lang: 'hi' | 'en') => {
     const key = `${segId}:${lang}`
