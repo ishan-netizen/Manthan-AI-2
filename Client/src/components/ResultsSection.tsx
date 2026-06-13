@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   FileText,
   BarChart3,
@@ -23,6 +23,7 @@ import type { AnalysisResults } from '@/types/analysis';
 
 interface ResultsSectionProps {
   results: AnalysisResults;
+  mediaRef?: React.RefObject<HTMLVideoElement | HTMLAudioElement>;
 }
 
 const statItems = [
@@ -59,13 +60,33 @@ const priorityLabels: Record<number, string> = {
   2: 'Low',
 };
 
-export const ResultsSection = ({ results }: ResultsSectionProps) => {
+export const ResultsSection = ({ results, mediaRef }: ResultsSectionProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [actionItems, setActionItems] = useState(results.action_items?.map(item => item.text) || []);
   const [completedItems, setCompletedItems] = useState<Set<number>>(new Set());
   const [newActionItem, setNewActionItem] = useState('');
   const [translations, setTranslations] = useState<Record<string, { loading: boolean; text?: string; lang?: string }>>({});
+  const [activeSegment, setActiveSegment] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const seekTo = useCallback((seconds: number) => {
+    if (mediaRef?.current) {
+      mediaRef.current.currentTime = seconds;
+      mediaRef.current.play();
+    }
+  }, [mediaRef]);
+
+  useEffect(() => {
+    const media = mediaRef?.current;
+    if (!media) return;
+    const onTimeUpdate = () => {
+      const t = media.currentTime;
+      const seg = results.transcript?.find(s => t >= s.start_time && t <= s.end_time);
+      setActiveSegment(seg?.id || null);
+    };
+    media.addEventListener('timeupdate', onTimeUpdate);
+    return () => media.removeEventListener('timeupdate', onTimeUpdate);
+  }, [mediaRef, results.transcript]);
 
   const handleTranslate = async (segId: string, text: string, lang: 'hi' | 'en') => {
     const key = `${segId}:${lang}`
@@ -193,9 +214,12 @@ export const ResultsSection = ({ results }: ResultsSectionProps) => {
             {results.transcript && results.transcript.length > 0 ? (
               <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
                 {results.transcript.map((segment, index) => (
-                  <div key={segment.id || index} className="flex gap-3 group">
+                  <div key={segment.id || index} className={`flex gap-3 group ${activeSegment === segment.id ? 'bg-primary/5 rounded-lg -mx-2 px-2' : ''}`} ref={activeSegment === segment.id ? (el) => { el?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } : undefined}>
                     <div className="flex-shrink-0 w-16 text-right">
-                      <span className="text-xs text-muted-foreground tabular-nums">
+                      <span
+                        className="text-xs text-muted-foreground tabular-nums cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => seekTo(segment.start_time)}
+                      >
                         {String(Math.floor(segment.start_time / 60)).padStart(2, '0')}:{String(Math.floor(segment.start_time % 60)).padStart(2, '0')}
                       </span>
                     </div>

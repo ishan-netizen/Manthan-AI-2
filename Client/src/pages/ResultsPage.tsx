@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { ResultsSection } from '@/components/ResultsSection';
@@ -12,6 +12,7 @@ const ResultsPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
 
   const results: AnalysisResults | null = location.state?.results || null;
 
@@ -213,7 +214,7 @@ const ResultsPage = () => {
         {playbackUrl && (
           <div className="surface-raised rounded-xl border border-border/30 p-4 mb-8 animate-fade-in">
             {results?.gcs_path?.match(/\.(mp4|webm|mov|avi|mkv)$/i) ? (
-              <video controls className="w-full rounded-lg max-h-[400px]" src={playbackUrl}>
+              <video ref={mediaRef as React.RefObject<HTMLVideoElement>} controls className="w-full rounded-lg max-h-[400px]" src={playbackUrl}>
                 Your browser does not support video playback.
               </video>
             ) : (
@@ -223,7 +224,7 @@ const ResultsPage = () => {
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium mb-1">{results?.filename || 'Recording'}</p>
-                  <audio controls className="w-full h-8" src={playbackUrl}>
+                  <audio ref={mediaRef as React.RefObject<HTMLAudioElement>} controls className="w-full h-8" src={playbackUrl}>
                     Your browser does not support audio playback.
                   </audio>
                 </div>
@@ -232,7 +233,7 @@ const ResultsPage = () => {
           </div>
         )}
 
-        <ResultsSection results={results} />
+        <ResultsSection results={results} mediaRef={mediaRef} />
       </main>
 
       {/* Background */}
